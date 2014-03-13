@@ -1,1 +1,1 @@
-MongoDB ODM module for kohana, based on Kohana's ORM module.
+MongoDB ODM module for Kohana, based on Kohana's ORM module.
