@@ -1,6 +1,6 @@
 <?php defined('SYSPATH') OR die('No direct script access.');
 /**
- * The result of ORM_Collection
+ * The result of ODM_Collection
  *
  * This class has various methods to make development easier
  *
