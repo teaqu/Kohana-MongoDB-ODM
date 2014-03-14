@@ -644,7 +644,7 @@ class Kohana_ODM extends Model {
 	/**
 	 * Find documents in the collection
 	 *
-	 * @return ODM_Collection_Result
+	 * @return ODM_Collection
 	 */
 	public function find_all()
 	{
@@ -656,7 +656,7 @@ class Kohana_ODM extends Model {
 			$result[] = ODM::factory($this->_object_name)->load($document);
 		}
 
-		return new ODM_Collection_Result($result);
+		return new ODM_Collection($result);
 	}
 
     /**
