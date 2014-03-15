@@ -2,10 +2,7 @@
 /**
  * Database connection wrapper/helper for nosql document databases.
  *
- * You may get a database instance using `Database::instance('name')` where
- * name is the [config](database/config) group.
- *
- * Used instead of Database for nosql databases as Database is too dependant on relational databases.
+ * @package ODM
  */
 abstract class Kohana_ODM_Database {
 
@@ -50,7 +47,7 @@ abstract class Kohana_ODM_Database {
 
 	/**
 	 * Get the correct property
-	 * 
+	 *
 	 * @param  string $prop
 	 * @return mixed the property ether from this object or the database
 	 */

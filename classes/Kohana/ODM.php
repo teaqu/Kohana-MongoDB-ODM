@@ -846,7 +846,6 @@ class Kohana_ODM extends Model {
 		if (($this->_valid = $array->check()) === FALSE OR $extra_errors)
 		{
 			$exception = new ODM_Validation_Exception($this->errors_filename, $array);
-
 			if ($extra_errors)
 			{
 				// Merge any possible errors from the external object

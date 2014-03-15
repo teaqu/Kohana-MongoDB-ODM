@@ -2,12 +2,9 @@
 /**
  * ODM Validation exceptions.
  *
- * @package    ODM
- * @author     Kohana Team
- * @copyright  (c) 2007-2012 Kohana Team
- * @license    http://kohanaframework.org/license
+ * @package ODM
  */
-class Kohana_ODM_Validation_Exception extends Exception {
+class Kohana_ODM_Validation_Exception extends Kohana_Exception {
 
 	/**
 	 * Array of validation objects
@@ -24,18 +21,24 @@ class Kohana_ODM_Validation_Exception extends Exception {
 	/**
 	 * Constructs a new exception for the specified model
 	 *
-	 * @param  string     $alias       The alias to use when looking for error messages
-	 * @param  Validation $object      The Validation object of the model
-	 * @param  string     $message     The error message
-	 * @param  array      $values      The array of values for the error message
-	 * @param  integer    $code        The error code for the exception
-	 * @return void
+	 * @param string     $alias    The alias to use when looking for error messages
+	 * @param Validation $object   The Validation object of the model
+	 * @param string     $message  The error message
+	 * @param array      $values   The array of values for the error message
+	 * @param integer    $code     The error code for the exception
+	 * @param Exception  $previous
 	 */
-	public function __construct($alias, Validation $object, $message = 'Failed to validate the ODM object. Place the object in a try catch block for more information.', array $values = NULL, $code = 0, Exception $previous = NULL)
+	public function __construct($alias, Validation $object, $message = '', array $values = NULL,
+		$code = 0, Exception $previous = NULL)
 	{
+		if (empty($message))
+		{
+			$message = 'Failed to validate the ODM object. Place the object in a try
+				catch block for more information.';
+		}
+
 		$this->_alias = $alias;
 		$this->_objects['_object'] = $object;
-		$this->_objects['_has_many'] = FALSE;
 
 		parent::__construct($message, $values, $code, $previous);
 	}
@@ -162,4 +165,4 @@ class Kohana_ODM_Validation_Exception extends Exception {
 	{
 		return $this->_alias;
 	}
-} // End ODM_Validation_Exception
+}
