@@ -1,7 +1,7 @@
 MongoDB ODM module for Kohana, based on Kohana's ORM module.
 
-* [Home](wiki/home)
-* [Basic Usage](wiki/basic-usage)
-* [Models](wiki/models)
-* [Filters](wiki/filters)
-* [Validation](wiki/validation)
+* [Home](/kaamaru/Kohana-MongoDB-ODM/wiki)
+* [Basic Usage](/kaamaru/Kohana-MongoDB-ODM/wiki/basic-usage)
+* [Models](/kaamaru/Kohana-MongoDB-ODM/wiki/models)
+* [Filters](/kaamaru/Kohana-MongoDB-ODM/wiki/filters)
+* [Validation](/kaamaru/Kohana-MongoDB-ODM/wiki/validation)
