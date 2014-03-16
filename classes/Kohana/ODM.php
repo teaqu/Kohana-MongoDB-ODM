@@ -1,7 +1,7 @@
 <?php defined('SYSPATH') OR die('No direct script access.');
 /**
  * [Object Document Mapping][ref-odm] (ODM) is a method of abstracting
- * database (nosql document) access to standard PHP calls. Documents
+ * database access to standard PHP calls. Documents
  * are represented as model objects, with object properties
  * representing document fields.
  *
@@ -29,13 +29,11 @@ class Kohana_ODM extends Model {
 	protected $_collection_name;
 
 	/**
-	 * Model name
 	 * @var string
 	 */
 	protected $_object_name;
 
 	/**
-	 * The document
 	 * @var array
 	 */
 	protected $_document = array();
@@ -46,7 +44,7 @@ class Kohana_ODM extends Model {
 	protected $_loaded = FALSE;
 
 	/**
-	 * function to run on the cursor
+	 * Functions to run on the cursor
 	 * @var array
 	 */
 	protected $_cursor_functions;
@@ -62,13 +60,11 @@ class Kohana_ODM extends Model {
 	protected $_update = array();
 
 	/**
-	 * The fields that you want to return
 	 * @var array
 	 */
 	protected $_fields = array();
 
 	/**
-	 * The logical operator
 	 * @var string
 	 */
 	protected $_logical = null;
@@ -84,11 +80,6 @@ class Kohana_ODM extends Model {
 	 */
 	protected $_valid = FALSE;
 
-	/**
-	 * ignore fields
-	 * @var array
-	 */
-	protected $_ignore = array();
 
 	/**
 	 * Prepares the model database connection, determines the table name,
@@ -156,7 +147,7 @@ class Kohana_ODM extends Model {
 			$this->errors_filename = $this->_object_name;
 		}
 
-		// Defualt _id type
+		// Default _id type
 		if ( ! isset($this->_schema['_id']))
 		{
 			$this->_schema['_id'] = 'id';
@@ -199,7 +190,9 @@ class Kohana_ODM extends Model {
 		$field =& $this->_follow_path($field_name, $this->_document);
 
 		if ($field !== $this->_document)
+		{
 			return $field;
+		}
 
 		return FALSE;
 	}
@@ -251,18 +244,17 @@ class Kohana_ODM extends Model {
 	}
 
 	/**
-	 * Set funcition
-	 * The benefit of this function is that it's chanable and has update operators
-	 *
 	 * @param  string $field
 	 * @param  string $value
-	 * @return $this
 	 */
 	public function __set($field, $value)
 	{
 		$this->set($field, $value);
 	}
 
+	/**
+	 * @param string $property
+	 */
 	public function __unset($property)
 	{
 		unset($this->_document[$property]);
@@ -541,7 +533,7 @@ class Kohana_ODM extends Model {
 	 *
 	 * @param  string $operation the operator
 	 * @param  string $field     field value
-	 * @param  mixed $value
+	 * @param  mixed  $value
 	 * @return $this
 	 */
 	public function where($field, $operation, $value)
@@ -570,44 +562,44 @@ class Kohana_ODM extends Model {
 		{
 			case 'size':
 				$this->_query[$field]['$size'] = (int) $value;
-				break;
+			break;
 			case 'in':
 				foreach ($value as $_value)
 				{
 					$this->_enforce_type($field, $_value);
 				}
 				$this->_query[$field]['$in'] = $value;
-				break;
+			break;
 			case '=':
 				$this->_query[$field] = $value;
-				break;
+			break;
 			case '<':
 				$this->_query[$field]['$lt'] = $value;
-				break;
+			break;
 			case '>':
 				$this->_query[$field]['$gt'] = $value;
-				break;
+			break;
 			case '>=':
 				$this->_query[$field]['$gte'] = $value;
-				break;
+			break;
 			case '<=':
 				$this->_query[$field]['$lte'] = $value;
-				break;
+			break;
 			case '!=':
 				$this->_query[$field]['$ne'] = $value;
-				break;
+			break;
 			case '!':
 				$this->_query[$field]['$nin'] = $value;
-				break;
+			break;
 			case 'near':
 				$this->_query[$field]['$near'] = $value;
-				break;
+			break;
 			case 'exists':
 				$this->_query[$field]['$exists'] = (bool) $value;
-				break;
+			break;
 			case 'regex':
 				$this->_query[$field] = new MongoRegex( (string) $value);
-				break;
+			break;
 		}
 
 		// Find logical query location and add the current operation
@@ -662,7 +654,7 @@ class Kohana_ODM extends Model {
     /**
      * Change the logical operator
      *
-     * @param $logic
+     * @param  $logic
      * @return $this
      */
 	public function logical($logic)
@@ -687,7 +679,7 @@ class Kohana_ODM extends Model {
 	/**
 	 * Sort results
 	 *
-	 * @param  string  $field
+	 * @param  string $field
 	 * @param  int    $value to sort by
 	 * @return $this
 	 */
@@ -730,8 +722,7 @@ class Kohana_ODM extends Model {
 	 * Update document in the database.
 	 *
 	 * @param Validation $extra_validation
-	 * @param  bool     $multiple
-	 * @return void
+	 * @param bool       $multiple
 	 */
 	protected function _update(Validation $extra_validation = NULL, $multiple)
 	{
@@ -779,7 +770,6 @@ class Kohana_ODM extends Model {
 	 * Update document
 	 *
 	 * @param Validation $extra_validation
-	 * @ void
 	 */
 	public function update(Validation $extra_validation = NULL)
 	{
@@ -874,8 +864,8 @@ class Kohana_ODM extends Model {
 	 *
 	 * http://bit.ly/1aJjXP4
 	 *
-	 * @param        $path
-	 * @param  mixed $value
+	 * @param  string $path
+	 * @param  mixed  $value
 	 * @throws Exception
 	 */
 	protected function _enforce_type($path, &$value)
@@ -956,11 +946,15 @@ class Kohana_ODM extends Model {
 	{
 		// Enforce MongoDate
 		if ($type == 'date' AND is_object($value) AND get_class($value) == 'MongoDate')
+		{
 			return;
+		}
 
 		// Enforce MongoId
 		if ($type == 'id' AND is_object($value) AND get_class($value) == 'MongoId')
+		{
 			return;
+		}
 
 		// Enforce string (int is ok as it can be converted)
 		if ($type == 'string' AND (is_string($value) OR is_int($value) OR is_null($value)))
@@ -978,7 +972,9 @@ class Kohana_ODM extends Model {
 
 		// Enforce bool
 		if ($type == 'bool' AND is_bool($value))
+		{
 			return;
+		}
 
 		throw new Kohana_Exception(
 			':field is not of type :type as specified in the :model schema',
@@ -1005,7 +1001,9 @@ class Kohana_ODM extends Model {
 		if (is_array($value))
 		{
 			if ($value == $this->as_array())
-				return NULL;
+			{
+				return '';
+			}
 
 			array_walk_recursive($value, function($item)
 			{
@@ -1021,10 +1019,10 @@ class Kohana_ODM extends Model {
 	/**
 	 * Follow a path
 	 *
-	 * @param  string  	$path   	the path to follow
-	 * @param  array   	$steps  	the steps in the path (The path target)
-	 * @param  bool  	$create 	create path if none exists
-	 * @return mixed				The end of the path
+	 * @param  string  $path   the path to follow
+	 * @param  array   $steps  the steps in the path (The path target)
+	 * @param  bool    $create create path if none exists
+	 * @return mixed           The end of the path
 	 */
 	protected function &_follow_path($path, &$steps, $create = FALSE)
 	{
@@ -1056,8 +1054,8 @@ class Kohana_ODM extends Model {
 	/**
 	 * Filters a value for a specific column
 	 *
-	 * @param  string $field  The column name
-	 * @param  string $value  The value to filter
+	 * @param  string $field The column name
+	 * @param  string $value The value to filter
 	 * @return string
 	 */
 	protected function run_filter($field, &$value)
@@ -1190,9 +1188,9 @@ class Kohana_ODM extends Model {
 	 * Checks whether a column value is unique.
 	 * Excludes itself if loaded.
 	 *
-	 * @param   string   $field  the field to check for uniqueness
-	 * @param   mixed    $value  the value to check for uniqueness
-	 * @return  bool     whteher the value is unique
+	 * @param   string  $field
+	 * @param   mixed   $value
+	 * @return  bool
 	 */
 	public function unique($field, $value)
 	{
@@ -1212,8 +1210,8 @@ class Kohana_ODM extends Model {
 	 * Send a command to the database
 	 * WARNING: commands are not validated
 	 *
-	 * @param array $command
-	 * @param array $options
+	 * @param  array $command
+	 * @param  array $options
 	 * @throws Exception
 	 * @return mixed command type
 	 */
