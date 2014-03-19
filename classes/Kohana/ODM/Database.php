@@ -3,6 +3,7 @@
  * Database connection wrapper/helper for nosql document databases.
  *
  * @package ODM
+ * @category   Drivers
  */
 abstract class Kohana_ODM_Database {
 
@@ -60,19 +61,10 @@ abstract class Kohana_ODM_Database {
 	 * it will be loaded from the database configuration file using the same
 	 * group as the name.
 	 *
-	 *     // Load the default database
-	 *     $db = Database::instance();
-	 *
-	 *     // Create a custom configured instance
-	 *     $db = Database::instance('custom', $config);
-	 *
-	 * @param   string $name   instance name
-	 * @param   array  $config configuration parameters
-	 * @throws Exception
-	 * @author         Kohana Team
-	 * @copyright  (c) 2007-2012 Kohana Team
-	 * @license        http://kohanaframework.org/license
-	 * @return  nosql
+	 * @param string $name
+	 * @param array  $config
+	 * @throws Kohana_Exception
+	 * @return Database_MongoDB
 	 */
 	public static function instance($name = NULL, array $config = NULL)
 	{
@@ -92,7 +84,7 @@ abstract class Kohana_ODM_Database {
 
 			if ( ! isset($config['type']))
 			{
-				throw new Exception('Database type not defined in :name configuration',
+				throw new Kohana_Exception('Database type not defined in :name configuration',
 					array(':name' => $name));
 			}
 

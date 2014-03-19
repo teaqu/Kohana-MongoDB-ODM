@@ -9,8 +9,6 @@ class Kohana_Database_MongoDB extends ODM_Database {
 
 	/**
 	 * Connect to the database
-	 *
-	 * @return void
 	 */
 	public function connect()
 	{
@@ -33,6 +31,8 @@ class Kohana_Database_MongoDB extends ODM_Database {
 		if ( ! $this->connection)
 		{
 			$this->connection = new MongoClient();
+
+			/** @var $database string */
 			$this->_select_db($database);
 		}
 	}
@@ -41,7 +41,6 @@ class Kohana_Database_MongoDB extends ODM_Database {
 	 * Select the database
 	 *
 	 * @param  string $database Database
-	 * @return void
 	 */
 	protected function _select_db($database)
 	{
