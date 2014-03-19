@@ -15,14 +15,16 @@ class Kohana_Database_MongoDB extends ODM_Database {
 	public function connect()
 	{
 		if ($this->connection)
+		{
 			return;
+		}
 
-		// Extract the connection parameters, adding required variabels
+		// Extract the connection parameters, adding required variables
 		extract($this->_config['connection'] + array(
-				'database'   => '',
-				'username'   => '',
-				'password'   => ''
-			));
+			'database' => '',
+			'username' => '',
+			'password' => ''
+		));
 
 		// Prevent this information from showing up in traces
 		unset($this->_config['connection']['username'], $this->_config['connection']['password']);

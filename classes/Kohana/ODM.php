@@ -80,6 +80,12 @@ class Kohana_ODM extends Model {
 	 */
 	protected $_valid = FALSE;
 
+	/**
+	 * Database config group
+	 * @var String
+	 */
+	protected $_db_group = NULL;
+
 
 	/**
 	 * Prepares the model database connection, determines the table name,
@@ -114,17 +120,19 @@ class Kohana_ODM extends Model {
 		return new static();
 	}
 
-    /**
-     * Constructs a new model
-     *
-     * @throws Exception
-     */
+	/**
+	 * Constructs a new model
+	 *
+	 * @throws Exception
+	 */
 	protected function __construct()
 	{
 		// Make sure schema exists
 		if ( ! isset($this->_schema))
+		{
 			throw new Kohana_Exception('Please define the schema for :model.',
 				array(':model' => get_class($this)));
+		}
 
 		// Set the object name
 		$this->_object_name = strtolower(substr(get_class($this), 6));
@@ -154,36 +162,38 @@ class Kohana_ODM extends Model {
 		}
 
 		// Setup database
-		$this->_db = ODM_Database::instance('default');
+		$this->_db = ODM_Database::instance($this->_db_group);
 		$this->_db->connect();
 	}
 
-    /**
-     * Get property from document
-     *
-     * @param $field_name
-     * @throws Exception
-     * @return mixed
-     */
+	/**
+	 * Get property from document
+	 *
+	 * @param $field_name
+	 * @throws Exception
+	 * @return mixed
+	 */
 	public function &__get($field_name)
 	{
 		// Get property from the loaded document
 		$field =& $this->_follow_path($field_name, $this->_document);
 
 		if ($field !== $this->_document)
+		{
 			return $field;
+		}
 
 		throw new Kohana_Exception(
 			'The :property property does not exist in the :class object or cannot be accessed.',
 			array(':property' => $field_name, ':class' => get_class($this)));
 	}
 
-    /**
-     * Same as __get though this returns FALSE on fail
-     *
-     * @param  $field_name
-     * @return bool|mixed
-     */
+	/**
+	 * Same as __get though this returns FALSE on fail
+	 *
+	 * @param  $field_name
+	 * @return bool|mixed
+	 */
 	public function get($field_name)
 	{
 		// Get property from the loaded document
@@ -237,8 +247,11 @@ class Kohana_ODM extends Model {
 			// Place ignore property in it's own array
 			$this->$property = $value;
 		}
-		else throw new Kohana_Exception(':property is not defined in the :model',
-			array(':property' => $property, ':model' => get_class($this)));
+		else
+		{
+			throw new Kohana_Exception(':property is not defined in the :model',
+				array(':property' => $property, ':model' => get_class($this)));
+		}
 
 		return $this;
 	}
@@ -417,13 +430,13 @@ class Kohana_ODM extends Model {
 		return $this;
 	}
 
-    /**
-     * Profile function
-     *
-     * @param  callback $function
-     * @param bool $export
-     * @return mixed
-     */
+	/**
+	 * Profile function
+	 *
+	 * @param  callback $function
+	 * @param bool $export
+	 * @return mixed
+	 */
 	protected function _profile($function, $export = FALSE)
 	{
 		if ($export === FALSE)
@@ -507,16 +520,18 @@ class Kohana_ODM extends Model {
 		return $this;
 	}
 
-    /**
-     * Find data from the database
-     *
-     * @throws Exception if not loaded
-     * @return MongoCursor used to iterate through the results of a database query
-     */
+	/**
+	 * Find data from the database
+	 *
+	 * @throws Exception if not loaded
+	 * @return MongoCursor used to iterate through the results of a database query
+	 */
 	protected function _find()
 	{
 		if ($this->_loaded)
+		{
 			throw new Kohana_Exception('Method find() cannot be called on loaded objects');
+		}
 
 		$cursor = $this->_profile(function()
 		{
@@ -651,12 +666,12 @@ class Kohana_ODM extends Model {
 		return new ODM_Collection($result);
 	}
 
-    /**
-     * Change the logical operator
-     *
-     * @param  $logic
-     * @return $this
-     */
+	/**
+	 * Change the logical operator
+	 *
+	 * @param  $logic
+	 * @return $this
+	 */
 	public function logical($logic)
 	{
 		$logic = explode('.', $logic);
@@ -910,17 +925,22 @@ class Kohana_ODM extends Model {
 				}
 
 				if ($value_found)
+				{
 					continue;
+				}
 
 				// Field was not found in the schema
-				if (isset($schema_field) AND isset($schema_type) AND $schema_field == '_keys')
+				if (isset($schema_field, $schema_type) AND $schema_field == '_keys')
 				{
 					$this->_check_type($value[$value_field], $schema_type, $path.'.'.$value_field);
 				}
-				else throw new Kohana_Exception(
-					':field could not be found in the :model schema',
-					array(':field' => $path, ':model' => get_class($this))
-				);
+				else
+				{
+					throw new Kohana_Exception(
+						':field could not be found in the :model schema',
+						array(':field' => $path, ':model' => get_class($this))
+					);
+				}
 			}
 		}
 		elseif (isset($schema['_keys']))
@@ -1218,7 +1238,9 @@ class Kohana_ODM extends Model {
 	public function command(array $command, $options = array())
 	{
 		if ($this->_loaded)
+		{
 			throw new Kohana_Exception('Method find() cannot be called on loaded objects');
+		}
 
 		$result = $this->_profile(function() use ($options, $command)
 		{
@@ -1226,5 +1248,24 @@ class Kohana_ODM extends Model {
 		}, 'command');
 
 		return $result;
+	}
+
+	/**
+	 * Get data type of a field
+	 *
+	 * @param $path
+	 * @return bool|string
+	 */
+	public function type($path)
+	{
+		// Get field type
+		$field = $this->_follow_path($path, $this->_schema);
+
+		if (is_array($field))
+		{
+			return FALSE;
+		}
+
+		return $field;
 	}
 }
