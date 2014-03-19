@@ -24,7 +24,9 @@ class Kohana_Auth_ODM extends Auth {
 		{
 			// If we don't have a roll no further checking is needed
 			if ( ! $role)
+			{
 				return TRUE;
+			}
 
 			if (is_array($role))
 			{
@@ -35,7 +37,9 @@ class Kohana_Auth_ODM extends Auth {
 				}
 			}
 			elseif ( ! is_object($role) AND ! in_array($role, $user->roles))
+			{
 				return FALSE;
+			}
 
 			return TRUE;
 		}
@@ -134,13 +138,15 @@ class Kohana_Auth_ODM extends Auth {
 			$token = ODM::factory('User_Token', array('token' => $token));
 
 			if ( ! $token->loaded())
+			{
 				return FALSE;
+			}
 
 			// Load the user
 			$user = Model_User::factory()
 				->where('_id', '=', $token->user)
 				->find();
-			
+
 			if ($user->loaded())
 			{
 				if ($token->user_agent === sha1(Request::$user_agent))
@@ -182,7 +188,9 @@ class Kohana_Auth_ODM extends Auth {
 		{
 			// check for "remembered" login
 			if (($user = $this->auto_login()) === FALSE)
+			{
 				return $default;
+			}
 		}
 
 		return $user;
@@ -275,7 +283,9 @@ class Kohana_Auth_ODM extends Auth {
 		$user = $this->get_user();
 
 		if ( ! $user)
+		{
 			return FALSE;
+		}
 
 		return ($this->hash($password) === $user->password);
 	}
@@ -293,7 +303,7 @@ class Kohana_Auth_ODM extends Auth {
 
 	/**
 	 * Verify password
-	 * 
+	 *
 	 * @param  string $str  the password string
 	 * @param  string $hash the password hash
 	 * @return bool         true on success

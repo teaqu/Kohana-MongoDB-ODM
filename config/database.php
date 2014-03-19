@@ -3,11 +3,8 @@
 return array
 (
 	'default' => array(
-		'type'       => 'MongoDB',
-		'connection' => array(
-			'database'   => '',
-			'username'   => '',
-			'password'   => ''
-		),
+		'type'     => 'MongoDB',
+		'server'   => 'mongodb://localhost:27017',
+		'database' => 'site'
 	),
 );

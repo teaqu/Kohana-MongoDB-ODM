@@ -18,7 +18,7 @@ class Kohana_ODM extends Model {
 
 	/**
 	 * The database instance
-	 * @var object
+	 * @var MongoClient
 	 */
 	protected $_db;
 
@@ -84,17 +84,24 @@ class Kohana_ODM extends Model {
 	 * Database config group
 	 * @var String
 	 */
-	protected $_db_group = NULL;
+	protected $_db_group = 'default';
 
 
 	/**
 	 * Prepares the model database connection, determines the table name,
-	 * and loads column infODMation.
+	 * and loads column information.
 	 *
-	 * @return ODM_Database
+	 * @return MongoClient
 	 */
 	protected function _db()
 	{
+		if ( ! $this->_db)
+		{
+			$config = Kohana::$config->load('database')->{$this->_db_group};
+			$client = new MongoClient($config['server']);
+			$this->_db = $client->selectDB($config['database']);
+		}
+
 		return $this->_db;
 	}
 
@@ -111,9 +118,7 @@ class Kohana_ODM extends Model {
 		if ($name)
 		{
 			$model_name = 'Model_'.$name;
-
 			$instance = new $model_name;
-
 			return $instance;
 		}
 
@@ -146,7 +151,6 @@ class Kohana_ODM extends Model {
 			// Pluralize last word
 			$last_key = count($object_name_parts) -1;
 			$object_name_parts[$last_key] = Inflector::plural($object_name_parts[$last_key]);
-
 			$this->_collection_name = implode('_', $object_name_parts);
 		}
 
@@ -160,10 +164,6 @@ class Kohana_ODM extends Model {
 		{
 			$this->_schema['_id'] = 'id';
 		}
-
-		// Setup database
-		$this->_db = ODM_Database::instance($this->_db_group);
-		$this->_db->connect();
 	}
 
 	/**
@@ -178,14 +178,14 @@ class Kohana_ODM extends Model {
 		// Get property from the loaded document
 		$field =& $this->_follow_path($field_name, $this->_document);
 
-		if ($field !== $this->_document)
+		if ($field === $this->_document)
 		{
-			return $field;
+			throw new Kohana_Exception(
+				'The :property property does not exist in the :class object or cannot be accessed.',
+				array(':property' => $field_name, ':class' => get_class($this)));
 		}
 
-		throw new Kohana_Exception(
-			'The :property property does not exist in the :class object or cannot be accessed.',
-			array(':property' => $field_name, ':class' => get_class($this)));
+		return $field;
 	}
 
 	/**
@@ -270,9 +270,7 @@ class Kohana_ODM extends Model {
 	 */
 	public function __unset($property)
 	{
-		unset($this->_document[$property]);
-		unset($this->$property);
-
+		unset($this->_document[$property], $this->$property);
 		$this->_update['$unset'][$property] = '';
 	}
 
@@ -305,7 +303,6 @@ class Kohana_ODM extends Model {
 
 		$set = $this->$field + $value;
 		$this->set($field, $set, FALSE);
-
 		$this->_update['$inc'][$field] = $value;
 
 		return $this;
@@ -326,7 +323,6 @@ class Kohana_ODM extends Model {
 		}
 
 		$this->set($field, array_push($this->$field, $value), FALSE);
-
 		$this->_update['$push'][$field] = $value;
 
 		return $this;
@@ -468,10 +464,7 @@ class Kohana_ODM extends Model {
 	 */
 	public function as_array()
 	{
-		// Get public properties
-		$publics = create_function('$obj', 'return get_object_vars($obj);');
-
-		return array_merge($this->_document, $publics($this));
+		return array_merge($this->_document, get_object_vars($this));
 	}
 
 	/**
@@ -656,8 +649,8 @@ class Kohana_ODM extends Model {
 	public function find_all()
 	{
 		$cursor = $this->_cursor_functions($this->_find());
-
 		$result = array();
+
 		foreach ($cursor as $document)
 		{
 			$result[] = ODM::factory($this->_object_name)->load($document);
