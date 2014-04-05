@@ -1,7 +1,7 @@
 <?php defined('SYSPATH') OR die('No direct script access.');
 /**
  * [Object Document Mapping][ref-odm] (ODM) is a method of abstracting
- * database access to standard PHP calls. Documents
+ * MongoDB access to standard PHP calls. Documents
  * are represented as model objects, with object properties
  * representing document fields.
  *
@@ -14,7 +14,7 @@ class Kohana_ODM extends Model {
 	 * Defaults to ODM::$_object_name
 	 * @var string
 	 */
-	public $errors_filename = NULL;
+	protected $_errors_filename;
 
 	/**
 	 * The database instance
@@ -65,15 +65,10 @@ class Kohana_ODM extends Model {
 	protected $_fields = array();
 
 	/**
-	 * @var string
-	 */
-	protected $_logical = null;
-
-	/**
 	 * Validation object created before saving/updating
 	 * @var Validation
 	 */
-	protected $_validation = NULL;
+	protected $_validation;
 
 	/**
 	 * @var bool
@@ -86,51 +81,22 @@ class Kohana_ODM extends Model {
 	 */
 	protected $_db_group = 'default';
 
+	/**
+	 * @var array
+	 */
+	protected $_rules = array();
 
 	/**
-	 * Prepares the model database connection, determines the table name,
-	 * and loads column information.
-	 *
-	 * @return MongoClient
+	 * @var array
 	 */
-	protected function _db()
-	{
-		if ( ! $this->_db)
-		{
-			$config = Kohana::$config->load('database')->{$this->_db_group};
-			$client = new MongoClient($config['server']);
-			$this->_db = $client->selectDB($config['database']);
-		}
-
-		return $this->_db;
-	}
-
-	/**
-	 * Creates and returns a new model.
-	 * Model name must be passed with its' original casing, e.g.
-	 *     $model = ODM::factory('User_Token');
-	 *
-	 * @param string $name
-	 * @return  $this
-	 */
-	public static function factory($name = '')
-	{
-		if ($name)
-		{
-			$model_name = 'Model_'.$name;
-			$instance = new $model_name;
-			return $instance;
-		}
-
-		return new static();
-	}
+	protected $_filters = array();
 
 	/**
 	 * Constructs a new model
 	 *
 	 * @throws Exception
 	 */
-	protected function __construct()
+	public function __construct()
 	{
 		// Make sure schema exists
 		if ( ! isset($this->_schema))
@@ -154,9 +120,9 @@ class Kohana_ODM extends Model {
 			$this->_collection_name = implode('_', $object_name_parts);
 		}
 
-		if ( ! $this->errors_filename)
+		if ( ! $this->_errors_filename)
 		{
-			$this->errors_filename = $this->_object_name;
+			$this->_errors_filename = $this->_object_name;
 		}
 
 		// Default _id type
@@ -189,24 +155,55 @@ class Kohana_ODM extends Model {
 	}
 
 	/**
-	 * Same as __get though this returns FALSE on fail
-	 *
-	 * @param  $field_name
-	 * @return bool|mixed
+	 * @param  string $field
+	 * @param  string $value
 	 */
-	public function get($field_name)
+	public function __set($field, $value)
 	{
-		// Get property from the loaded document
-		$field =& $this->_follow_path($field_name, $this->_document);
-
-		if ($field !== $this->_document)
-		{
-			return $field;
-		}
-
-		return FALSE;
+		$this->set($field, $value);
 	}
 
+	/**
+	 * @param string $property
+	 */
+	public function __unset($property)
+	{
+		unset($this->_document[$property], $this->$property);
+		$this->_update['$unset'][$property] = '';
+	}
+
+	/**
+	 * @param string $prop
+	 * @return bool
+	 */
+	public function __isset($prop)
+	{
+		// get field
+		$field =& $this->_follow_path($prop, $this->_document);
+
+		return ($field !== $this->_document);
+	}
+
+	/**
+	 * Creates and returns a new model.
+	 *
+	 * Model name must be passed with its' original casing, e.g.
+	 *     $model = ODM::factory('User_Token');
+	 *
+	 * @param string $name
+	 * @return  $this
+	 */
+	public static function factory($name = '')
+	{
+		if ($name)
+		{
+			$model_name = 'Model_'.$name;
+			$instance = new $model_name;
+			return $instance;
+		}
+
+		return new static();
+	}
 
 	/**
 	 * Set value to the document
@@ -225,7 +222,7 @@ class Kohana_ODM extends Model {
 		if ($field !== $this->_document)
 		{
 			// Run any filters
-			$this->run_filter($property, $value);
+			$this->_run_filter($property, $value);
 
 			// Enforce data type
 			$this->_enforce_type($property, $value);
@@ -257,24 +254,6 @@ class Kohana_ODM extends Model {
 	}
 
 	/**
-	 * @param  string $field
-	 * @param  string $value
-	 */
-	public function __set($field, $value)
-	{
-		$this->set($field, $value);
-	}
-
-	/**
-	 * @param string $property
-	 */
-	public function __unset($property)
-	{
-		unset($this->_document[$property], $this->$property);
-		$this->_update['$unset'][$property] = '';
-	}
-
-	/**
 	 * Unset a field. The same as unset(), but chainable
 	 *
 	 * @param string $field
@@ -283,6 +262,7 @@ class Kohana_ODM extends Model {
 	public function unset_field($field)
 	{
 		unset($this->$field);
+
 		return $this;
 	}
 
@@ -296,13 +276,7 @@ class Kohana_ODM extends Model {
 	 */
 	public function inc($field, $value = 1)
 	{
-		if ( ! isset($this->$field))
-		{
-			$this->set($field, 0, FALSE);
-		}
-
-		$set = $this->$field + $value;
-		$this->set($field, $set, FALSE);
+		$this->$field += $value;
 		$this->_update['$inc'][$field] = $value;
 
 		return $this;
@@ -328,32 +302,106 @@ class Kohana_ODM extends Model {
 		return $this;
 	}
 
-	public function __isset($prop)
+	/**
+	 * Select the fields you want returned
+	 *
+	 * @return $this
+	 */
+	public function select()
 	{
-		// get field
-		$field =& $this->_follow_path($prop, $this->_document);
+		$this->_fields = func_get_args();
 
-		if ($field !== $this->_document)
-		{
-			return TRUE;
-		}
-
-		return FALSE;
+		return $this;
 	}
 
 	/**
-	 * Load a document into the model
+	 * Limit results
 	 *
-	 * @param  array $document
+	 * @param  int|mixed  $limit
 	 * @return $this
 	 */
-	public function load($document)
+	public function limit($limit)
 	{
-		if ($document)
-		{
-			$this->_document = array_merge($this->_document, $document);
-			$this->_loaded = TRUE;
-		}
+		$this->_cursor_functions['limit'] = $limit;
+
+		return $this;
+	}
+
+	/**
+	 * Skip results
+	 *
+	 * @param  int  $skip
+	 * @return $this
+	 */
+	public function skip($skip)
+	{
+		$this->_cursor_functions['skip'] = $skip;
+
+		return $this;
+	}
+
+	/**
+	 * And where
+	 *
+	 * @param $field
+	 * @param $operation
+	 * @param $value
+	 * @return $this
+	 */
+	public function where($field, $operation, $value)
+	{
+		return $this->_where($field, $operation, $value, NULL);
+	}
+
+	/**
+	 * Or where
+	 *
+	 * @param $field
+	 * @param $operation
+	 * @param $value
+	 * @return $this
+	 */
+	public function or_where($field, $operation, $value)
+	{
+		return $this->_where($field, $operation, $value, '$or');
+	}
+
+	/**
+	 * Not where
+	 *
+	 * @param $field
+	 * @param $operation
+	 * @param $value
+	 * @return $this
+	 */
+	public function not_where($field, $operation, $value)
+	{
+		return $this->_where($field, $operation, $value, '$not');
+	}
+
+	/**
+	 * Nor where
+	 *
+	 * @param $field
+	 * @param $operation
+	 * @param $value
+	 * @return $this
+	 */
+	public function nor_where($field, $operation, $value)
+	{
+		return $this->_where($field, $operation, $value, '$not');
+	}
+
+	/**
+	 * Sort results
+	 *
+	 * @param  string $field
+	 * @param  int    $value to sort by
+	 * @return $this
+	 */
+	public function sort($field, $value = 1)
+	{
+		$this->_cursor_functions['sort'][$field] = $value;
 
 		return $this;
 	}
@@ -376,6 +424,51 @@ class Kohana_ODM extends Model {
 	}
 
 	/**
+	 * Send a command to the database
+	 *
+	 * [!!] not validated with _enforce_type
+	 *
+	 * @param  array $command
+	 * @param  array $options
+	 * @throws Exception
+	 * @return mixed command type
+	 */
+	public function command(array $command, $options = array())
+	{
+		if ($this->_loaded)
+		{
+			throw new Kohana_Exception('Method find() cannot be called on loaded objects');
+		}
+
+		$result = $this->_profile(function() use ($options, $command)
+		{
+			return $this->_db->connection->command($command, $options);
+		}, 'command', $command);
+
+		return $result;
+	}
+
+	/**
+	 * Set or get the query
+	 *
+	 * [!!] not validated with _enforce_type
+	 *
+	 * @param mixed $query
+	 * @return $this|array
+	 */
+	public function query($query = FALSE)
+	{
+		if ($query === FALSE)
+		{
+			$this->_query = $query;
+
+			return $this;
+		}
+
+		return $this->_query;
+	}
+
+	/**
 	 * Save document to the database.
 	 * Update the existing document, otherwise insert the document.
 	 *
@@ -384,7 +477,14 @@ class Kohana_ODM extends Model {
 	 */
 	public function save(Validation $extra_validation = NULL)
 	{
-		return $this->_query('save', $extra_validation);
+		$this->check($extra_validation);
+
+		$this->_profile(function()
+		{
+			$this->_db->{$this->_collection_name}->save($this->_document);
+		}, 'save', $this->_query);
+
+		return $this;
 	}
 
 	/**
@@ -395,7 +495,14 @@ class Kohana_ODM extends Model {
 	 */
 	public function insert(Validation $extra_validation = NULL)
 	{
-		return $this->_query('insert', $extra_validation);
+		$this->check($extra_validation);
+
+		$this->_profile(function()
+		{
+			$this->_db->{$this->_collection_name}->insert($this->_document);
+		}, 'insert', $this->_query);
+
+		return $this;
 	}
 
 	/**
@@ -405,373 +512,48 @@ class Kohana_ODM extends Model {
 	 */
 	public function remove()
 	{
+
 		if ($this->loaded())
 		{
+			// Remove current document
 			$this->_profile(function()
 			{
-				$this->_db()->{$this->_collection_name}->remove($this->_document);
-			});
+				$this->_db->{$this->_collection_name}->remove($this->_document, TRUE);
+			}, 'Remove', $this->_document);
+
+			$this->_document = array();
+			$this->_loaded = FALSE;
 		}
 		else
 		{
+			// Remove documents in query
 			$this->_profile(function()
 			{
-				$this->_db()->{$this->_collection_name}->remove($this->_query);
-			});
+				$this->_db->{$this->_collection_name}->remove($this->_query, TRUE);
+			}, 'remove', $this->_query);
 		}
 
-		$this->_document = array();
-		$this->_loaded = FALSE;
+		$this->clear();
 
 		return $this;
 	}
 
 	/**
-	 * Profile function
+	 * Remove all documents found
 	 *
-	 * @param  callback $function
-	 * @param bool $export
-	 * @return mixed
-	 */
-	protected function _profile($function, $export = FALSE)
-	{
-		if ($export === FALSE)
-		{
-			$export = $this->_query;
-		}
-
-		if (Kohana::$profiling)
-		{
-			// Benchmark this query for the current instance
-			$name = get_class($this);
-			$benchmark = Profiler::start('Database', $name.' '.print_r($export, TRUE));
-		}
-
-		$result = $function();
-
-		if (isset($benchmark))
-		{
-			Profiler::stop($benchmark);
-		}
-
-		return $result;
-	}
-
-	/**
-	 * Return the document as an array
-	 *
-	 * @return array
-	 */
-	public function as_array()
-	{
-		return array_merge($this->_document, get_object_vars($this));
-	}
-
-	/**
-	 * Query document to the database.
-	 *
-	 * @param            $type
-	 * @param Validation $extra_validation
-	 * @internal param string $ the type of query
 	 * @return $this
 	 */
-	protected function _query($type, Validation $extra_validation = NULL)
+	public function remove_all()
 	{
-		// Require model validation before saving
-		if ( ! $this->_valid OR $extra_validation)
+		// Remove documents in query
+		$this->_profile(function()
 		{
-			$this->check($extra_validation);
-		}
+			$this->_db->{$this->_collection_name}->remove($this->_query);
+		}, 'Remove all', $this->_query);
 
-		$this->_profile(function() use($type)
-		{
-			$this->_db()->{$this->_collection_name}->$type($this->_document);
-		});
+		$this->clear();
 
 		return $this;
-	}
-
-	/**
-	 * Find if the object is loaded
-	 *
-	 * @return bool
-	 */
-	public function loaded()
-	{
-		return $this->_loaded;
-	}
-
-	/**
-	 * Select the fields you want returned
-	 *
-	 * @return $this
-	 */
-	public function select()
-	{
-		$this->_fields = func_get_args();
-
-		return $this;
-	}
-
-	/**
-	 * Find data from the database
-	 *
-	 * @throws Exception if not loaded
-	 * @return MongoCursor used to iterate through the results of a database query
-	 */
-	protected function _find()
-	{
-		if ($this->_loaded)
-		{
-			throw new Kohana_Exception('Method find() cannot be called on loaded objects');
-		}
-
-		$cursor = $this->_profile(function()
-		{
-			return $this->_db()->{$this->_collection_name}->find($this->_query, $this->_fields);
-		});
-
-		$this->query(NULL);
-
-		return $cursor;
-	}
-
-	/**
-	 * Comparison Operators
-	 *
-	 * @param  string $operation the operator
-	 * @param  string $field     field value
-	 * @param  mixed  $value
-	 * @return $this
-	 */
-	public function where($field, $operation, $value)
-	{
-		// Enforce data types
-		settype($field, 'string');
-		settype($operation, 'string');
-
-		// If logical, Store $this->_query
-		if ($this->_logical)
-		{
-			$query = $this->_query;
-			$this->_query = array();
-		}
-
-		// These operations will be enforced on their own
-		$no_enforce = array('in', 'size', 'exists', 'regex');
-
-		if ( ! in_array($operation, $no_enforce))
-		{
-			$this->_enforce_type($field, $value);
-		}
-
-		// Build query
-		switch ($operation)
-		{
-			case 'size':
-				$this->_query[$field]['$size'] = (int) $value;
-			break;
-			case 'in':
-				foreach ($value as $_value)
-				{
-					$this->_enforce_type($field, $_value);
-				}
-				$this->_query[$field]['$in'] = $value;
-			break;
-			case '=':
-				$this->_query[$field] = $value;
-			break;
-			case '<':
-				$this->_query[$field]['$lt'] = $value;
-			break;
-			case '>':
-				$this->_query[$field]['$gt'] = $value;
-			break;
-			case '>=':
-				$this->_query[$field]['$gte'] = $value;
-			break;
-			case '<=':
-				$this->_query[$field]['$lte'] = $value;
-			break;
-			case '!=':
-				$this->_query[$field]['$ne'] = $value;
-			break;
-			case '!':
-				$this->_query[$field]['$nin'] = $value;
-			break;
-			case 'near':
-				$this->_query[$field]['$near'] = $value;
-			break;
-			case 'exists':
-				$this->_query[$field]['$exists'] = (bool) $value;
-			break;
-			case 'regex':
-				$this->_query[$field] = new MongoRegex( (string) $value);
-			break;
-		}
-
-		// Find logical query location and add the current operation
-		if ($this->_logical)
-		{
-			// Transverse the query
-			$recursive = &$query;
-
-			foreach (explode('.', $this->_logical) as $key)
-			{
-				$recursive = &$recursive[$key];
-			}
-
-			// Add current operation to the end of the query
-			$recursive[] = $this->_query;
-
-			$this->_query = $query;
-		}
-
-		return $this;
-	}
-
-	/**
-	 * Find documents in the collection
-	 *
-	 * @return $this
-	 */
-	public function find()
-	{
-		$cursor = $this->_cursor_functions($this->_find());
-		return $this->load($cursor->limit(-1)->getNext());
-	}
-
-	/**
-	 * Find documents in the collection
-	 *
-	 * @return ODM_Collection
-	 */
-	public function find_all()
-	{
-		$cursor = $this->_cursor_functions($this->_find());
-		$result = array();
-
-		foreach ($cursor as $document)
-		{
-			$result[] = ODM::factory($this->_object_name)->load($document);
-		}
-
-		return new ODM_Collection($result);
-	}
-
-	/**
-	 * Change the logical operator
-	 *
-	 * @param  $logic
-	 * @return $this
-	 */
-	public function logical($logic)
-	{
-		$logic = explode('.', $logic);
-
-		// Add $ if needed
-		foreach ($logic as &$value)
-		{
-			if (in_array($value, array('or', 'and', 'not', 'nor')))
-			{
-				$value = '$'.$value;
-			}
-		}
-
-		$this->_logical = implode('.', $logic);
-
-		return $this;
-	}
-
-
-	/**
-	 * Sort results
-	 *
-	 * @param  string $field
-	 * @param  int    $value to sort by
-	 * @return $this
-	 */
-	public function sort($field, $value = 1)
-	{
-		$this->_cursor_functions['sort'][$field] = $value;
-
-		return $this;
-	}
-
-	/**
-	 * Set the query if $query is set, else get the current query
-	 *
-	 * @param  mixed $query
-	 * @return $this
-	 */
-	public function query($query = FALSE)
-	{
-		// Clear all queries
-		if ($query === NULL)
-		{
-			$this->_query = array();
-			$this->_fields = array();
-			$this->_logical = array();
-			$this->_update = array();
-		}
-
-		// Set query
-		if ($query !== FALSE)
-		{
-			$this->_query = (array) $query;
-			return $this;
-		}
-
-		// Return query
-		return $this->_query;
-	}
-
-	/**
-	 * Update document in the database.
-	 *
-	 * @param Validation $extra_validation
-	 * @param bool       $multiple
-	 */
-	protected function _update(Validation $extra_validation = NULL, $multiple)
-	{
-		// Require model validation before saving
-		if ( ! $this->_valid OR $extra_validation)
-		{
-			$this->check($extra_validation);
-		}
-
-		// Add _id to query
-		if (isset($this->_document['_id']) AND ! isset($this->_query['_id']))
-		{
-			$this->_query['_id'] = $this->_document['_id'];
-		}
-
-		if (Kohana::$profiling)
-		{
-			// Benchmark this query for the current instance
-			$benchmark = Profiler::start(
-				"Database",
-				'Update '.
-					var_export($this->_query, TRUE).
-					'Set '.
-					var_export($this->_update, TRUE)
-			);
-		}
-
-		$this->_db()->{$this->_collection_name}->update(
-			$this->_query,
-			$this->_update,
-			array(
-				'multiple' => $multiple
-			)
-		);
-
-		if (isset($benchmark))
-		{
-			Profiler::stop($benchmark);
-		}
-
-		$this->query(NULL);
 	}
 
 	/**
@@ -795,24 +577,140 @@ class Kohana_ODM extends Model {
 	}
 
 	/**
-	 * Initializes validation rules, and labels
+	 * Find documents in the collection
+	 *
+	 * @return $this
 	 */
-	protected function _validation()
+	public function find()
 	{
-		// Build the validation object with its rules
-		$this->_validation = Validation::factory($this->_document);
+		$cursor = $this->_cursor_functions($this->_find());
 
-		foreach ($this->rules() as $field => $rules)
-		{
-			$this->_validation->rules($field, $rules);
-		}
-
-		foreach ($this->_document as $field => $label)
-		{
-			$this->_validation->label($field, $label);
-		}
+		return $this->load($cursor->limit(-1)->getNext());
 	}
 
+	/**
+	 * Find documents in the collection
+	 *
+	 * @return ODM_Collection
+	 */
+	public function find_all()
+	{
+		$cursor = $this->_cursor_functions($this->_find());
+		$result = array();
+
+		foreach ($cursor as $document)
+		{
+			$result[] = ODM::factory($this->_object_name)->load($document);
+		}
+
+		return new ODM_Collection($result);
+	}
+
+	/**
+	 * Count documents in the collection
+	 *
+	 * @return int
+	 */
+	public function count()
+	{
+		$result = $this->_profile(function()
+		{
+			return $this->_db->{$this->_collection_name}->count($this->_query);
+		}, 'count', $this->_query);
+
+		$this->clear();
+
+		return $result;
+	}
+
+	/**
+	 * Return the document as an array
+	 *
+	 * @return array
+	 */
+	public function as_array()
+	{
+		return array_merge($this->_document, get_object_vars($this));
+	}
+
+	/**
+	 * Find if the object is loaded
+	 *
+	 * @return bool
+	 */
+	public function loaded()
+	{
+		return $this->_loaded;
+	}
+
+	/**
+	 * Clear object's queries
+	 *
+	 * @return $this
+	 */
+	public function clear()
+	{
+		$this->_query = array();
+		$this->_fields = array();
+		$this->_update = array();
+
+		return $this;
+	}
+
+	/**
+	 * Get a property, but pass through HTML::chars() first
+	 *
+	 * @param $path
+	 * @return mixed HTML::chars() parsed string
+	 */
+	public function safe($path)
+	{
+		$document = $this->as_array();
+		$value = $this->_follow_path($path, $document);
+
+		// HTML::chars() every element of the array
+		if (is_array($value))
+		{
+			if ($value == $this->as_array())
+			{
+				return '';
+			}
+
+			array_walk_recursive($value, function($item)
+			{
+				return HTML::chars($item);
+			});
+
+			return $value;
+		}
+
+		return HTML::chars($value);
+	}
+
+	/**
+	 * Same as __get though this returns FALSE on fail
+	 *
+	 * @param  $field_name
+	 * @return bool|mixed
+	 */
+	public function get($field_name)
+	{
+		// Get property from the loaded document
+		$field =& $this->_follow_path($field_name, $this->_document);
+
+		if ($field !== $this->_document)
+		{
+			return $field;
+		}
+
+		return FALSE;
+	}
+
+	/**
+	 * Get validation
+	 *
+	 * @return Validation
+	 */
 	public function validation()
 	{
 		if ( ! isset($this->_validation))
@@ -843,7 +741,7 @@ class Kohana_ODM extends Model {
 
 		if (($this->_valid = $array->check()) === FALSE OR $extra_errors)
 		{
-			$exception = new ODM_Validation_Exception($this->errors_filename, $array);
+			$exception = new ODM_Validation_Exception($this->_errors_filename, $array);
 			if ($extra_errors)
 			{
 				// Merge any possible errors from the external object
@@ -856,28 +754,231 @@ class Kohana_ODM extends Model {
 	}
 
 	/**
-	 * Rule definitions for validation
+	 * Load a document into the model and mark object as loaded
 	 *
-	 * @return array
+	 * [!!] not validated with _enforce_type (use values() instead)
+	 *
+	 * @param array|bool $document
+	 * @return $this
 	 */
-	public function rules()
+	public function load($document)
 	{
-		return array();
+		if ($document)
+		{
+			$this->_document = array_merge($this->_document, $document);
+			$this->_loaded = TRUE;
+		}
+
+		return $this;
 	}
 
 	/**
-	 * Enforce the data to a spesific variable type defined with $this->_schema.
+	 * Comparison Operators
+	 *
+	 * @param  string $field     field value
+	 * @param  string $operation the operator
+	 * @param  mixed  $value
+	 * @param  string $logical
+	 * @return $this
+	 */
+	protected function _where($field, $operation, $value, $logical)
+	{
+		// Enforce data types
+		settype($field, 'string');
+		settype($operation, 'string');
+
+		$query = array();
+
+		// These operations will be enforced on their own
+		$no_enforce = array('in', 'size', 'exists', 'regex');
+
+		if ( ! in_array($operation, $no_enforce))
+		{
+			$this->_enforce_type($field, $value);
+		}
+
+		// Build query
+		switch ($operation)
+		{
+			case 'size':
+				$query[$field]['$size'] = (int) $value;
+			break;
+			case 'in':
+				foreach ($value as $_value)
+				{
+					$this->_enforce_type($field, $_value);
+				}
+
+				$query[$field]['$in'] = $value;
+			break;
+			case '=':
+				$query[$field] = $value;
+			break;
+			case '<':
+				$query[$field]['$lt'] = $value;
+			break;
+			case '>':
+				$query[$field]['$gt'] = $value;
+			break;
+			case '>=':
+				$query[$field]['$gte'] = $value;
+			break;
+			case '<=':
+				$query[$field]['$lte'] = $value;
+			break;
+			case '!=':
+				$query[$field]['$ne'] = $value;
+			break;
+			case '!':
+				$query[$field]['$nin'] = $value;
+			break;
+			case 'near':
+				$query[$field]['$near'] = $value;
+			break;
+			case 'exists':
+				$query[$field]['$exists'] = (bool) $value;
+			break;
+			case 'regex':
+				$query[$field] = new MongoRegex( (string) $value);
+			break;
+		}
+
+		if ($logical)
+		{
+			$query = array($logical => array($query));
+		}
+
+		$this->_query = array_merge_recursive($this->_query, $query);
+
+		return $this;
+	}
+
+	/**
+	 * Find data from the database
+	 *
+	 * @throws Exception if not loaded
+	 * @return MongoCursor used to iterate through the results of a database query
+	 */
+	protected function _find()
+	{
+		if ($this->_loaded)
+		{
+			throw new Kohana_Exception('Method find() cannot be called on loaded objects');
+		}
+
+		$cursor = $this->_profile(function()
+		{
+			return $this->_db->{$this->_collection_name}->find($this->_query, $this->_fields);
+		}, 'find', $this->_query);
+
+		$this->clear();
+
+		return $cursor;
+	}
+
+	/**
+	 * Update document in the database
+	 *
+	 * @param Validation $extra_validation
+	 * @param bool       $multiple
+	 */
+	protected function _update(Validation $extra_validation = NULL, $multiple)
+	{
+		// Require model validation before saving
+		if ( ! $this->_valid OR $extra_validation)
+		{
+			$this->check($extra_validation);
+		}
+
+		// Add _id to query
+		if (isset($this->_document['_id']) AND ! isset($this->_query['_id']))
+		{
+			$this->_query['_id'] = $this->_document['_id'];
+		}
+
+		$this->_profile(function() use ($multiple)
+			{
+				$this->_db->{$this->_collection_name}->update(
+					$this->_query,
+					$this->_update,
+					array('multiple' => $multiple)
+				);
+			},
+			$multiple ? 'update_all' : 'update',
+			array('query' => $this->_query, 'update' => $this->_update));
+
+		$this->clear();
+	}
+
+	/**
+	 * Profile function
+	 *
+	 * @param callback $function
+	 * @param string   $method
+	 * @param array    $query
+	 * @return mixed
+	 */
+	protected function _profile($function, $method = NULL, $query)
+	{
+		// Connect to database
+		$this->_connect();
+
+		if (Kohana::$profiling)
+		{
+			// Benchmark this query for the current instance
+			$name = get_class($this);
+			$benchmark = Profiler::start('Database', "$name::$method ".print_r($query, TRUE));
+		}
+
+		$result = $function();
+
+		if (isset($benchmark))
+		{
+			Profiler::stop($benchmark);
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Initializes validation rules, and labels
+	 */
+	protected function _validation()
+	{
+		// Build the validation object with its rules
+		$this->_validation = Validation::factory($this->_document);
+
+		foreach ($this->_rules as $field => $rules)
+		{
+			$this->_validation->rules($field, $rules);
+		}
+
+		foreach ($this->_document as $field => $label)
+		{
+			$this->_validation->label($field, $label);
+		}
+	}
+
+	/**
+	 * Enforce the data to a specific variable type defined with $this->_schema.
 	 * If the data is the wrong type, it will attempt to change it, otherwise it
-	 * will thorw an error.
+	 * will throw an error.
 	 *
-	 * http://bit.ly/1aJjXP4
+	 * Set _schema to FALSE to disable this method.
 	 *
+	 * @link http://bit.ly/1aJjXP4
 	 * @param  string $path
 	 * @param  mixed  $value
 	 * @throws Exception
 	 */
 	protected function _enforce_type($path, &$value)
 	{
+		// Don't enforce
+		if ($this->_schema === FALSE)
+		{
+			return;
+		}
+
 		// Get field type
 		$schema = $this->_follow_path($path, $this->_schema);
 
@@ -895,34 +996,24 @@ class Kohana_ODM extends Model {
 			// Parse all values in the array
 			foreach ($value as $value_field => &$value_value)
 			{
-				// True when array key found in schema
-				$value_found = FALSE;
-
 				foreach ($schema as $schema_field => $schema_type)
 				{
 					// Value found, enforce it's type
 					if ($value_field == $schema_field)
 					{
-						// Dive deepr into the array
 						if (is_array($value_value) AND is_array($schema_type))
 						{
+							// Dive deeper into the array
 							$this->_enforce_type($path.'.'.$value_field, $value_value);
 						}
 						else
 						{
 							$this->_check_type($value_value, $schema_type, $schema_field);
 						}
-						$value_found = TRUE;
-						break;
+						continue 2;
 					}
 				}
 
-				if ($value_found)
-				{
-					continue;
-				}
-
-				// Field was not found in the schema
 				if (isset($schema_field, $schema_type) AND $schema_field == '_keys')
 				{
 					$this->_check_type($value[$value_field], $schema_type, $path.'.'.$value_field);
@@ -955,31 +1046,36 @@ class Kohana_ODM extends Model {
 	 * @throws Exception
 	 * @return bool
 	 */
-	public function _check_type(&$value, $type, $field)
+	protected function _check_type(&$value, $type, $field)
 	{
 		// Enforce MongoDate
-		if ($type == 'date' AND is_object($value) AND get_class($value) == 'MongoDate')
+		if (is_object($value))
 		{
-			return;
-		}
+			if ($type == 'date' AND get_class($value) == 'MongoDate')
+			{
+				return;
+			}
 
-		// Enforce MongoId
-		if ($type == 'id' AND is_object($value) AND get_class($value) == 'MongoId')
-		{
-			return;
+			// Enforce MongoId
+			if ($type == 'id' AND get_class($value) == 'MongoId')
+			{
+				return;
+			}
 		}
 
 		// Enforce string (int is ok as it can be converted)
 		if ($type == 'string' AND (is_string($value) OR is_int($value) OR is_null($value)))
 		{
 			settype($value, 'string');
+
 			return;
 		}
 
-		// Enforce interger
+		// Enforce integer
 		if ($type == 'int' AND (is_string($value) OR is_int($value)))
 		{
 			settype($value, 'int');
+
 			return;
 		}
 
@@ -993,40 +1089,10 @@ class Kohana_ODM extends Model {
 			':field is not of type :type as specified in the :model schema',
 			array(
 				':field' => $field,
-				':type' => $type,
+				':type'  => $type,
 				':model' => get_class($this)
 			)
 		);
-	}
-
-	/**
-	 * Get a property, but pass through HTML::chars() first.
-	 *
-	 * @param $path
-	 * @return string HTML::chars() parsed string
-	 */
-	public function safe($path)
-	{
-		$document = $this->as_array();
-		$value = $this->_follow_path($path, $document);
-
-		// HTML::chars() every element of the array
-		if (is_array($value))
-		{
-			if ($value == $this->as_array())
-			{
-				return '';
-			}
-
-			array_walk_recursive($value, function($item)
-			{
-				return HTML::chars($item);
-			});
-
-			return $value;
-		}
-
-		return HTML::chars($value);
 	}
 
 	/**
@@ -1049,6 +1115,7 @@ class Kohana_ODM extends Model {
 			{
 				$steps =& $steps[$step];
 			}
+
 			// It's an object
 			elseif (is_object($steps) AND property_exists($steps, $step))
 			{
@@ -1065,15 +1132,34 @@ class Kohana_ODM extends Model {
 	}
 
 	/**
+	 * Run any cursor functions such as limit
+	 *
+	 * @param MongoCursor
+	 * @return MongoCursor
+	 */
+	protected function _cursor_functions($cursor)
+	{
+		if ($this->_cursor_functions)
+		{
+			foreach ($this->_cursor_functions as $function => $param)
+			{
+				$cursor->{$function}($param);
+			}
+		}
+
+		return $cursor;
+	}
+
+	/**
 	 * Filters a value for a specific column
 	 *
 	 * @param  string $field The column name
 	 * @param  string $value The value to filter
 	 * @return string
 	 */
-	protected function run_filter($field, &$value)
+	protected function _run_filter($field, &$value)
 	{
-		$filters = $this->filters();
+		$filters = $this->_filters;
 
 		// Get the filters for this column
 		$wildcards = empty($filters[TRUE]) ? array() : $filters[TRUE];
@@ -1082,10 +1168,10 @@ class Kohana_ODM extends Model {
 		$filters = empty($filters[$field]) ? $wildcards : array_merge($wildcards, $filters[$field]);
 
 		// Bind the field name and model so they can be used in the filter method
-		$_bound = [
+		$_bound = array(
 			':field' => $field,
 			':model' => $this,
-		];
+		);
 
 		foreach ($filters as $array)
 		{
@@ -1134,131 +1220,16 @@ class Kohana_ODM extends Model {
 	}
 
 	/**
-	 * Filter definitions for validation
-	 *
-	 * @return array
+	 * Prepares the model database connection
 	 */
-	public function filters()
+	protected function _connect()
 	{
-		return array();
-	}
-
-	/**
-	 * Limit results
-	 *
-	 * @param  int|mixed  $limit
-	 * @return $this
-	 */
-	public function limit($limit)
-	{
-		$this->_cursor_functions['limit'] = $limit;
-
-		return $this;
-	}
-
-	/**
-	 * Skip results
-	 *
-	 * @param  int  $skip
-	 * @return $this
-	 */
-	public function skip($skip)
-	{
-		$this->_cursor_functions['skip'] = $skip;
-
-		return $this;
-	}
-
-	/**
-	 * Run any cursor functions such as limit
-	 *
-	 * @param MongoCursor
-	 * @return MongoCursor
-	 */
-	protected function _cursor_functions($cursor)
-	{
-		if ($this->_cursor_functions)
+		if ( ! $this->_db)
 		{
-			foreach ($this->_cursor_functions as $function => $param)
-			{
-				$cursor->{$function}($param);
-			}
+			$config = Kohana::$config->load('database')->{$this->_db_group};
+			$client = new MongoClient($config['server']);
+			$this->_db = $client->selectDB($config['database']);
 		}
-		return $cursor;
 	}
 
-	/**
-	 * Count documents in the collection
-	 *
-	 * @return int
-	 */
-	public function count()
-	{
-		return $this->_db()->{$this->_collection_name}->count($this->_query);
-	}
-
-	/**
-	 * Checks whether a column value is unique.
-	 * Excludes itself if loaded.
-	 *
-	 * @param   string  $field
-	 * @param   mixed   $value
-	 * @return  bool
-	 */
-	public function unique($field, $value)
-	{
-		$model = ODM::factory($this->_object_name)
-			->where($field, '=', $value)
-			->find();
-
-		if ($this->loaded())
-		{
-			return ( ! ($model->loaded() AND $model->_id != $this->_id));
-		}
-
-		return ( ! $model->loaded());
-	}
-
-	/**
-	 * Send a command to the database
-	 * WARNING: commands are not validated
-	 *
-	 * @param  array $command
-	 * @param  array $options
-	 * @throws Exception
-	 * @return mixed command type
-	 */
-	public function command(array $command, $options = array())
-	{
-		if ($this->_loaded)
-		{
-			throw new Kohana_Exception('Method find() cannot be called on loaded objects');
-		}
-
-		$result = $this->_profile(function() use ($options, $command)
-		{
-			return $this->_db()->connection->command($command, $options);
-		}, 'command');
-
-		return $result;
-	}
-
-	/**
-	 * Get data type of a field
-	 *
-	 * @param $path
-	 * @return bool|string
-	 */
-	public function type($path)
-	{
-		// Get field type
-		$field = $this->_follow_path($path, $this->_schema);
-
-		if (is_array($field))
-		{
-			return FALSE;
-		}
-
-		return $field;
-	}
 }

@@ -8,12 +8,12 @@
  */
 class Kohana_ODM_Collection extends ArrayObject {
 
-    /**
-     * Get the properties from the collection
-     *
-     * @param $property
-     * @return array
-     */
+	/**
+	 * Get the properties from the collection
+	 *
+	 * @param $property
+	 * @return array
+	 */
 	public  function __get($property)
 	{
 		foreach ($this as $document)
